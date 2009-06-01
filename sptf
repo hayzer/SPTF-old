@@ -1,0 +1,886 @@
+#!/usr/bin/perl
+#===============================================================================
+#
+#         FILE:  sptf
+#
+#        USAGE:  ./sptf
+#
+#  DESCRIPTION:  SPTF for Simple Perl Testing Framework
+#
+#      OPTIONS:  ---
+# REQUIREMENTS:  ---
+#         BUGS:  ---
+#        NOTES:  ---
+#       AUTHOR:  Thomas Maier (), <hayzer@gmail.com>
+#      COMPANY:  
+#      VERSION:  1.0
+#      CREATED:  03/13/2008 11:56:25 PM ISTF 
+#     REVISION:  ---
+#===============================================================================
+
+#===============================================================================
+# This file is a SPFT program.
+# Copyright (C) 2008 - 2008 Thomas Maier
+#
+# SPTF is free software; you can redistribute it and/or modify
+# it under the same terms as Perl itself.
+#===============================================================================
+
+use warnings;
+use strict;
+use Carp;
+use YAML qw(LoadFile);
+use Getopt::Long;
+use Test::More;
+use Test::Builder;
+use lib './lib';
+
+my ($no_total_time,$no_table);
+BEGIN {
+	eval "use Time::Elapse;1"     or $no_total_time = 1;
+	eval "use Text::ASCIITable;1" or $no_table      = 1;
+}
+
+$| = 1;
+
+my ($get_test_data,$get_scenario_data);
+my ($opts,$testflag,$motto);
+my $author = q{default};
+my @names;
+
+my $scenariopath = q{scenarios};
+my $testspath    = q{tests};
+
+#---------------------------------------------------------------------------
+#  We're using Test::Builder here to save test output in
+#  the given file.
+#---------------------------------------------------------------------------
+my $Test = Test::Builder->new;
+
+my @tests     = yaml_files($testspath);
+my @scenarios = yaml_files($scenariopath);
+
+GetOptions(
+	"show-executor"         => sub { $opts->{showme}  = q{executor}     },
+	"show-continuity"       => sub { $opts->{showme}  = q{continuity}   },
+	"show-configuration"    => sub { $opts->{showme}  = q{configuration}},
+	"show-tags"             => sub { $opts->{showme}  = q{tags}         },
+	"show-date"             => sub { $opts->{showme}  = q{date}         },
+	"show-params"           => sub { $opts->{showme}  = q{parameters}   },
+	"show-postreq"          => sub { $opts->{showme}  = q{postreq}      },
+	"show-prereq"           => sub { $opts->{showme}  = q{prereq}       },
+	"show-summary"          => sub { $opts->{showme}  = q{summary}      },
+	"show-description"      => sub { $opts->{showme}  = q{description}  },
+	"show-author"           => sub { $opts->{showme}  = q{author}       },
+	"show-bug"              => sub { $opts->{showme}  = q{bug}          },
+	"show-duration"         => sub { $opts->{showme}  = q{duration}     },
+	"show-testid"           => sub { $opts->{showme}  = q{testid}       },
+	"show-id-of-tag"        => sub { $opts->{showme}  = q{idoftag}      },
+	"show-id"               => sub { $opts->{showme}  = q{id}           },
+	"show-todo"             => sub { $opts->{showme}  = q{todo}         },
+	"show-skip"             => sub { $opts->{showme}  = q{skip}         },
+	"show-file"             => sub { $opts->{showme}  = q{file}         },
+	"show-dependency"       => sub { $opts->{showme}  = q{dependency}   },
+	"show-priority"         => sub { $opts->{showme}  = q{priority}     },
+	"show-test-cases"       => sub { $opts->{showme}  = q{testcases}    },
+	"show-all-tags"         => sub { $opts->{showme}  = q{alltags}      },
+	"show-all-ids"          => sub { $opts->{showme}  = q{allids}       },
+	"show-tc-summary"       => sub { $opts->{showme}  = q{tcsummary}    },
+	"all-scenarios"         => sub { 
+								$opts->{key} = q{allscenarios};
+								$testflag    = q{scenarios};
+								},
+	"all-tests"             => sub { 
+								$opts->{key} = q{alltests};
+								$testflag    = q{tests};
+								},
+	"test-id=s"             => sub { 
+								$opts->{key} = $_[1];
+                                $testflag = q{tests};
+								},
+	"scenario-id=s"         => sub {
+								$opts->{key} = $_[1];
+								$testflag = q{scenarios};
+								},
+	"test-name=s"           => sub {
+								$opts->{key} = "$testspath/$_[1]";
+                                $testflag = q{tests};
+								},
+	"test-tag=s"            => sub {
+								$opts->{key} = $_[1];
+								$testflag    = q{tests};
+								},
+	"scenario-tag=s"        => sub {
+								$opts->{key} = $_[1];
+								$testflag    = q{scenarios};
+								},
+	"test-author=s"         => sub {
+								$opts->{key} = qq{$_[1]};
+								$author      = qq{$_[1]};
+								$testflag    = q{tests};
+								},
+	"scenario-author=s"     => sub {
+								$opts->{key} = qq{$_[1]};
+								$author      = qq{$_[1]};
+								$testflag    = q{scenarios};
+								},
+	"run"                   => \$opts->{run},
+	"name-regex=s"          =>  sub {
+									for (@tests) {
+										push @names, $_ 
+											if ($_ =~ qr{^$testspath/$_[1]$});
+									}
+									$opts->{key} = join ',', @names;
+									$testflag = q{tests};
+							   },
+	"notable"               => \$opts->{notable},
+	"total-time"            => \$opts->{totaltime},
+	"sort"                  => \$opts->{sorted},
+	"no-dependency-check"   => \$opts->{nodependencycheck},
+	"no-priority-check"     => \$opts->{noprioritycheck},
+	"priority=s"            => \$opts->{priority},
+	"config-file=s"         => \$opts->{configfile},
+	"test-builder"          => \$opts->{testbuilder},
+	"verbose"               => sub { $ENV{SPTF_VERBOSE}     = 1     },
+	"output-file=s"         => sub { $ENV{SPTF_TEST_OUTPUT} = $_[1] },
+	"add-default-name"      => \$opts->{adddefaultname},
+	"motto"                 => \$motto,
+	"help"                  => \&short_usage,
+);
+
+if ($motto) {
+	for (qw(83 80 84 70 32 109 97 107 101 115 32 101 97 115 121 32 116 104 105 
+	        110 103 115 32 104 97 114 100 44 32 97 110 100 32 104 97 114 100 
+			32 116 104 105 110 103 115 32 105 109 112 111 115 115 105 98 108 101 10))
+			{print chr($_)}
+	exit 0;
+}
+
+#---------------------------------------------------------------------------
+#  Configuration file
+#---------------------------------------------------------------------------
+$opts->{configfile} ||= q{.sptfrc};
+my $config            = config_file($opts->{configfile});
+
+$ENV{SPTF_TEST_OUTPUT} ||= $config->{testoutput};
+
+if ($ENV{SPTF_TEST_OUTPUT}) {
+	open my $fh, '>', $ENV{SPTF_TEST_OUTPUT};
+
+	$Test->todo_output($fh);
+	$Test->failure_output($fh);
+	$Test->output($fh);
+}
+
+$opts->{priority}          ||= $config->{priority};
+$opts->{testbuilder}       ||= $config->{testbuilder};
+$opts->{adddefaultname}    ||= $config->{adddefaultname};
+$opts->{nodependencycheck} ||= $config->{nodependencycheck};
+$opts->{noprioritycheck}   ||= $config->{noprioritycheck};
+$opts->{totaltime}         ||= $config->{showtotaltime};
+$opts->{notable}           ||= $config->{notable};
+$ENV{SPTF_VERBOSE}         ||= $config->{verbose};
+
+if ($opts->{totaltime} and $no_total_time) {
+	print "To use --total-time option, first install Time::Elapse perl module.\n";
+	exit 1;
+}
+
+if (! $opts->{notable} and $no_table) {
+	print "Use --notable option or install Text::ASCIITable perl module.\n";
+	exit 1;
+}
+
+if ( not defined $opts->{key} ) {
+	print "Missing additional parameter\n";
+	exit 1;
+}
+
+if ($opts->{key} eq 'alltests') {
+	$opts->{key} = join ',', @tests;
+}
+elsif ($opts->{key} eq 'allscenarios') {
+	$opts->{key} = join ',', @scenarios;
+}
+	
+#---------------------------------------------------------------------------
+#  Test case metadata tokens. Convert YAML data structure to the one 
+#  used later by the program.
+#---------------------------------------------------------------------------
+my $test_info = {
+	'date'          => sub { shift->{date}                         },
+	'testid'        => sub { shift->{id}                           },
+	'file'          => sub { shift->{file}                         },
+	'summary'       => sub { shift->{summary}                      },
+	'author'        => sub { shift->{author}                       },
+	'description'   => sub { shift->{description}                  },
+	'bug'           => sub { shift->{bug}                          },
+	'duration'      => sub { shift->{duration}                     },
+	'continuity'    => sub { shift->{continuity}                   },
+	'skip'          => sub { shift->{skip}                         },
+	'todo'          => sub { shift->{todo}                         },
+	'prereq'        => sub { shift->{prereq}                       },
+	'postreq'       => sub { shift->{postreq}                      },
+	'dependency'    => sub { shift->{dependency}                   },
+	'priority'      => sub { shift->{priority}                     },
+	'tags'          => sub { join ',', @{ shift->{tags}          } },
+	'tests'         => sub { join ',', @{ shift->{tests}         } },
+	'configuration' => sub { join ',', @{ shift->{configuration} } },
+	'testcases'     => sub {
+		my $tests = \@{ shift->{tests} }; 
+		join ',', @{ $tests };
+	},
+	'scenarios'     => sub { join ',', @{ shift->{scenarios}     } },
+	'parameters'    => sub { 
+		my $params = shift->{parameters};
+		return "" if (not defined $params->[0]);
+		return join ',', @{ $params };
+	},
+	'executor'      => sub { 
+		my $data = shift->{executor};
+		return "$data->{class},$data->{method}" if ($data->{'method'});
+		return "$data->{binary}"                if ($data->{'binary'});
+	},
+};
+
+#---------------------------------------------------------------------------
+# Parse all yamls.
+#---------------------------------------------------------------------------
+my $all_test = sub {
+	my @yamls = @_;
+	my ($scenario,$testid);
+	my $duplicated_id  = {};
+	my $duplicated_tag = {};
+
+	for my $test (@yamls) {
+		my $def = LoadFile($test);
+		
+		#---------------------------------------------------------------------------
+		#  We'll save few data structures for the on demand requests
+		#  In case of a lot of YAML files - it's a bad idea.
+		#  Better we would to keep it in some DB.
+		#---------------------------------------------------------------------------
+		my $testid         = $def->{id};
+
+		#---------------------------------------------------------------------------
+		#  First lets check out for duplicated ids
+		#  Yes, it happen to me...
+		#---------------------------------------------------------------------------
+		if ( exists $duplicated_id->{$testid} ) {
+			print "Duplicated id [$testid] exists in the follow files:\n";
+			print "- $duplicated_id->{$testid}\n";
+			print "- $test\n";
+			exit 1;
+		}
+		$duplicated_id->{$testid} = $test;
+
+		#---------------------------------------------------------------------------
+		#  Save tests info by test file name
+		#---------------------------------------------------------------------------
+		$scenario->{$test} = $def;
+		$def->{file}       = $test;
+
+		#---------------------------------------------------------------------------
+		#  Save test info by test id
+		#---------------------------------------------------------------------------
+		$scenario->{$testid} = $def;
+
+		#---------------------------------------------------------------------------
+		#  Save all id's
+		#---------------------------------------------------------------------------
+		push @{ $scenario->{allids} }, $testid;
+
+		#---------------------------------------------------------------------------
+		#  Save id's by the author name
+		#---------------------------------------------------------------------------
+		my $author = qq{$def->{author}};
+		push @{ $scenario->{$author} }, $testid;
+
+		#---------------------------------------------------------------------------
+		#  Save id's by tag.
+		#  Save all tags.
+		#---------------------------------------------------------------------------
+		my $tags            = $def->{tags};
+		for (@{ $tags }) {
+			push @{ $scenario->{idoftag}->{$_} }, $testid;
+			push @{ $scenario->{alltags} }      , $_
+				if (! exists $duplicated_tag->{$_});
+
+			$duplicated_tag->{$_}++;
+		}
+	}
+
+	return sub {
+		my ($data,$subtoken) = @_;
+		
+		return wantarray ? sort @{ $scenario->{$subtoken}->{$data} } : $scenario->{$data};
+	}
+};
+
+#---------------------------------------------------------------------------
+#  Reference point to all data from YAML files.
+#---------------------------------------------------------------------------
+$get_test_data     = $all_test->(@tests);
+$get_scenario_data = $all_test->(@scenarios);
+
+#---------------------------------------------------------------------------
+#  UI pointer.
+#---------------------------------------------------------------------------
+my $presenter = sub {
+	my @elems = grep{ ucfirst $_ }@_;
+	my $text;
+
+	#---------------------------------------------------------------------------
+	#  Print show command as text or text table
+	#---------------------------------------------------------------------------
+	my $t;
+	if (! $opts->{notable}) {
+		$t = Text::ASCIITable->new;
+		$t->setCols(@elems);
+	}
+
+	return sub {
+		if (! $opts->{notable}) {
+			$t->addRow(@_);
+			return $t;
+		}
+		else {
+			#---------------------------------------------------------------------------
+			#  Don't print first element which usually 
+			#  is a index name.
+			#---------------------------------------------------------------------------
+			my $tmp = join ' ', @_[1..$#_];
+			$text  .= $tmp . "\n";
+			return "$text";
+		}
+	}
+};
+
+#---------------------------------------------------------------------------
+#  Show requested detail(s).
+#---------------------------------------------------------------------------
+show_test_element($opts->{showme},$opts->{key}) if ($opts->{showme});
+
+#---------------------------------------------------------------------------
+#  Run test, run.
+#---------------------------------------------------------------------------
+diag(q{Start time: } . scalar localtime) if $ENV{SPTF_VERBOSE};
+if ($opts->{'run'}) {
+	my ($tests,@test_ids);
+	
+	if ($testflag eq q{scenarios}) {
+		$opts->{key} = get_tests_from_scenario( $opts->{key} );
+	}
+
+	@test_ids = split /,/, $opts->{key};
+
+	#---------------------------------------------------------------------------
+	#  Check dependency.
+	#---------------------------------------------------------------------------
+	if (! $opts->{nodependencycheck}) {
+		exit 1 if ! check_dependency(\@test_ids);
+	}
+
+	#---------------------------------------------------------------------------
+	#  Check priority.
+	#---------------------------------------------------------------------------
+	if (! $opts->{noprioritycheck}) {
+		my $prioritizied_ids = check_priority(\@test_ids);
+		@test_ids            = @{ $prioritizied_ids };
+	}
+
+	my $now;
+	if ($opts->{totaltime}) {
+		Time::Elapse->lapse($now);
+	}
+
+	plan tests   => scalar @test_ids;
+	executor(@test_ids);
+
+	if ($opts->{totaltime}) {
+		diag qq{Total test time: $now};
+	}
+}
+
+diag(q{End time: }. scalar localtime) if $ENV{SPTF_VERBOSE};
+exit 0;
+
+#---------------------------------------------------------------------------
+#  Rip test case ids from given scenarios
+#---------------------------------------------------------------------------
+sub get_tests_from_scenario {
+	my ($scenarios,$tests) = @_;
+	
+	return $tests if ! $scenarios;
+	my @scenarios = split /,/, $scenarios;
+
+	#---------------------------------------------------------------------------
+	#  In case you run multiple test scenarios
+	#---------------------------------------------------------------------------
+	my $scenario = shift @scenarios;
+	my $test_ids = join ',', @{ $get_scenario_data->($scenario)->{tests} };
+
+	my @scenario_tests;
+	(defined $tests) 
+		? push @scenario_tests, $tests, $test_ids
+		: push @scenario_tests, $test_ids;
+
+	$tests     = join ',' , @scenario_tests;
+	$scenarios = join ',' , @scenarios;
+
+	get_tests_from_scenario($scenarios,$tests)
+}
+
+#---------------------------------------------------------------------------
+#  Pull single element from the test case
+#---------------------------------------------------------------------------
+sub get_single_element {
+	my ($id,$keyname,$get_data)  = @_;
+
+	#---------------------------------------------------------------------------
+	#  Since this function is mostly used in test case 'executor',
+	#  lets make its call there a bit shorter.
+	#---------------------------------------------------------------------------
+	if ( not defined $get_data ) {
+		$get_data = $get_test_data;
+	}
+
+	my $data_from_file = $get_data->($id);
+
+	if (not defined $data_from_file) {
+		print "Cannot find data for ID: $id\n"; 
+		exit 1;
+	}
+
+	return $test_info->{$keyname}->($data_from_file,$id);
+}
+
+sub numsort {
+	return sort{ $a <=> $b }@_ if $opts->{sorted};
+	return @_;
+}
+
+sub show_test_element {
+	my ($token,$id) = @_;
+	my ($first_col,@id_s,$ids,$data);
+
+	#---------------------------------------------------------------------------
+	#  From which repository to take all the details
+	#---------------------------------------------------------------------------
+	$data = $get_test_data     if ($testflag eq q{tests});
+	$data = $get_scenario_data if ($testflag eq q{scenarios});
+
+	#---------------------------------------------------------------------------
+	#  Special cases. I hate this.
+	#---------------------------------------------------------------------------
+	if ($token =~ m{\A ^(?:idoftag)$ \z}xms) {
+		$ids       = join ',', $data->($id,$token);
+	}
+	elsif ($token =~ m{\A ^(?:alltags|allids)$ \z}xms) {
+		$ids       = join "\n", numsort(@{ $data->($token) });
+	}
+#	elsif ($token =~ m{\A ^(?:allids)$ \z}xms) {
+#		$ids       = join "\n", numsort(@{ $data->($token) });
+#	}
+	elsif ($id =~ m{\A ^(?:$author)$ \z}xms) {
+		$ids       = join ',', @{ $data->($id) };
+#		$first_col = uc substr($token,4);
+	}
+	elsif ($token =~ m{\A ^(?:tcsummary)$ \z}xms) {
+		if ($testflag ne q{scenarios}) {
+			print "--show-tc-summary goes together only with --scenario-id.\n";
+			exit 1;
+		}
+
+		#---------------------------------------------------------------------------
+		#  get_single_element does not work here somehow. 
+		#  So we go streight to the database. 
+		#---------------------------------------------------------------------------
+		my $test_ids = $data->($id)->{q{tests}};
+
+		@id_s      = numsort(@{ $test_ids });
+		$token     = q{summary};
+		$data      = $get_test_data;
+		$first_col = q{TestID};
+	}
+	else {
+		my @second_col = split /,/, $id;
+		$first_col = q{ID};
+
+		#---------------------------------------------------------------------------
+		#  In --all-* commands, first column should be IDs of 
+		#  requested content.
+		#---------------------------------------------------------------------------
+		for (@second_col) {
+			my $id =  $data->($_);
+			push @id_s,$id->{id};
+		}
+		#---------------------------------------------------------------------------
+		#  It became enoying to watch sorted ids in this option
+		#---------------------------------------------------------------------------
+		@id_s = numsort(@id_s);
+	}
+		
+	my ($string,$output,$presentation);
+	
+	#---------------------------------------------------------------------------
+	#  Header of the table (if requested)
+	#---------------------------------------------------------------------------
+	($first_col)
+	? ($presentation = $presenter->($first_col,"$token"))
+	: ($presentation = $presenter->("$token"));
+
+	#---------------------------------------------------------------------------
+	#  For single row.
+	#---------------------------------------------------------------------------
+	if (! @id_s) { 
+#		$output = $presentation->($id,$ids);
+		$output = $presentation->($ids);
+	}
+	else {
+		#---------------------------------------------------------------------------
+		#  For multiple rows.
+		#---------------------------------------------------------------------------
+		for (@id_s) {
+			$string = get_single_element(
+				$_,
+				$token,
+				$data,
+			);
+
+			#---------------------------------------------------------------------------
+			#  Body of the table
+			#---------------------------------------------------------------------------
+			$output = $presentation->($_,qq{$string});
+		}
+	}
+	print $output;
+	exit 0;
+}
+
+sub executor {
+	my @ids = @_;
+	my ($retval,$message);
+
+	return if ! @ids;
+
+	my $testid  = shift @ids;
+
+	my $skip       = get_single_element($testid, q{skip});
+	my $todo       = get_single_element($testid, q{todo});
+	my $continuity = get_single_element($testid, q{continuity});
+
+	my ($class,$method) = split(/,/,        get_single_element($testid,	q{executor}));
+
+	if ($skip) {
+		SKIP: {
+			skip qq{$skip}, 1;
+			($retval,$message) = eval_executor($testid,$class,$method);
+			ok($retval, $message) if ! $opts->{testbuilder};
+		}
+	}
+	elsif ($todo) {
+		TODO: {
+			local $TODO = qq{$todo};
+			($retval,$message) = eval_executor($testid,$class,$method);
+			ok($retval, $message) if ! $opts->{testbuilder};
+		}
+	}
+	#---------------------------------------------------------------------------
+	#  Run the test..
+	#---------------------------------------------------------------------------
+	elsif (not defined $method) {
+		#---------------------------------------------------------------------------
+		#  First binaries
+		#---------------------------------------------------------------------------
+		($retval,$message) = eval_executor($testid,$class,$method);
+
+		if (! $retval && ! $continuity) {
+			diag(q{End time: } . scalar localtime);
+			BAIL_OUT($message);
+		}
+		ok($retval, $message);
+	}
+	else {
+		($retval,$message) = eval_executor($testid,$class,$method);
+
+		#---------------------------------------------------------------------------
+		#  Stop test scenario if test failed and continuity=0
+		#---------------------------------------------------------------------------
+		if (! $retval && ! $continuity) {
+			diag(q{End time: } . scalar localtime);
+			BAIL_OUT($message);
+		}
+		ok($retval, $message) if ! $opts->{testbuilder};
+	}
+
+	executor(@ids);
+}
+
+sub eval_executor {
+	my ($testid,$class,$method) = @_;
+	my $retval;
+
+	my @params          = split(/,/,        get_single_element($testid, q{parameters}));
+	my $message         = qq{ [$testid] } . get_single_element($testid, q{summary});
+
+	#---------------------------------------------------------------------------
+	#  Execute prerequisite 
+	#  NOTE:
+	#  		If prerequisite TC has its own prerequisite, it will be execute
+	#  		here.
+	#---------------------------------------------------------------------------
+	my $prereq  = get_single_element($testid, q{prereq});
+	if ($prereq) {
+		my ($class,$method)     = split(/,/, get_single_element($prereq, q{executor}));
+		my ($preretval,$premsg) = eval_executor($prereq,$class,$method) ;
+
+		if (! $preretval) {
+			diag(qq{[$prereq] Prerequisit of TC [$testid] failed: [$premsg]});
+		}
+	}
+
+	#---------------------------------------------------------------------------
+	#  Execute given method or executable
+	#---------------------------------------------------------------------------
+	if ($class and $method) {
+		eval "use $class";
+		if ($@) {
+			carp qq{Failed to load class: $class\nERROR: $@\n};
+		}
+
+		no strict 'refs';
+
+		#---------------------------------------------------------------------------
+		#  Add message as first method parameter if requested.
+		#  This way Test::Builder wil print the given metadata.
+		#---------------------------------------------------------------------------
+		unshift @params, qq{$message} if $opts->{adddefaultname};
+		$retval = eval { &$method(@params) };
+		if ($@) { 
+			my $err   = qq{$@};
+			$message .= qq{: $err};
+			$retval   = 0;
+		}
+	}
+	elsif ($class) {
+		#---------------------------------------------------------------------------
+		#  If there're only 1 executor parameter, binary file was requested.
+		#---------------------------------------------------------------------------
+		$retval = system(qq{bin/$class}, @params) ? 0 : 1;
+	}
+	
+	#---------------------------------------------------------------------------
+	#  Execute postrequisite
+	#---------------------------------------------------------------------------
+	my $postreq  = get_single_element($testid, q{postreq});
+	if ($postreq) {
+		my ($class,$method)       = split(/,/, get_single_element($postreq, q{executor}));
+		my ($postretval,$postmsg) = eval_executor($postreq,$class,$method);
+
+		if (! $postretval) {
+			diag(qq{[$postreq] Postrequisit of TC [$testid] failed: [$postmsg]});
+		}
+	}
+
+	return ($retval,$message);
+}
+
+sub check_dependency {
+	my ($tests)       = @_;
+	my %test_to_check = map { $_ => 1 } @{ $tests };
+	my $retval        = 1;
+
+	for (@{ $tests }) {
+		my $dep = get_single_element($_, q{dependency});
+
+		if ($dep and ! exists $test_to_check{$dep}) {
+			print "Missing dependency! TC [$_] depends on TC [$dep].\n";
+
+			#---------------------------------------------------------------------------
+			#  Deep dependency check.
+			#---------------------------------------------------------------------------
+			push @{ $tests }, $dep;
+			$test_to_check{$dep} = 1;
+			$retval              = 0;
+		}
+	}
+	return $retval;
+}
+	
+sub check_priority {
+	my ($tests) = @_;
+	my @new_tests;
+
+	#---------------------------------------------------------------------------
+	#  Pre/postreq TC will remain not prioritized.
+	#  It may break the test. (?)
+	#---------------------------------------------------------------------------
+	for (@{ $tests }) {
+		my $priority = get_single_element($_, q{priority});
+
+		if ($priority le $opts->{priority}) {
+			push @new_tests, $_;
+		}
+	}
+	return \@new_tests;
+}
+
+sub config_file {
+	my ($file) = @_;
+	my $confstring;
+
+	if ( !-e $file ) {
+		croak "Can't find configuration file [$file]";
+	}
+
+	open my $config, '<', $file 
+		or croak "Can't open for read the configuration file [$file]: $!";
+	
+	while(<$config>) {
+		next if /^#/;
+		$confstring .= $_;
+	}
+
+	return eval $confstring;
+}
+
+sub yaml_files {
+	my ($path) = @_;
+
+	opendir my $dsu, qq{$path/};
+	return map{ qq{$path/$_} }
+		   grep{ /^.*\.yaml$/ }
+		   readdir $dsu;
+}
+
+sub short_usage {
+	(my $usage_msg = <<END_OF_USAGE) =~ s/^\t//gm;
+	Usage:  sptf [OPTIONS]
+
+	Present or execute SPTF tests. 
+
+	Show test case attributes:
+	(If used without additional parameters, show attributes for all
+	test cases)
+	  --show-executor       Show execute parameters of the test case
+	  --show-tags           Show all tags of the test case/scenario
+	  --show-date           Show the date of the test case/scenario
+	  --show-params         Show parameters used by the executor of the 
+	                        test case
+	  --show-postreq        Show postrequisets of the test case
+	  --show-prereq         Show prerequisets of the test case
+	  --show-summary        Show summary of the test case/scenario
+	  --show-priority       Show priority of the test case/scenario
+	  --show-dependency     Show dependency of the test case
+	  --show-description    Show description of the test case/scenario
+	  --show-bug            Show bug ID, if exists
+	  --show-duration       Show duration time of the test case
+	  --show-author         Show author of the test case/scenario
+	  --show-file           Show the test case YAML file name
+	  --show-testid         Show ID of the test case
+	  --show-todo           Show todo message of the test case/scenario
+	  --show-skip           Show skip message of the test case/scenario
+	  --show-all-tags       Show all tags (use with show all parameters)
+	  --show-all-ids        Show all IDs  (use with show all parameters)
+	  --show-id             Show all IDs for given key (currently works
+	                        only with --test-author)
+	  --show-tc-summary     Show all test cases summary of given scenario
+	  --show-configuration  Show scenario configuration parameter (goes only
+	  						with TS)
+
+	Show test scenario attributes:
+	  --show-configuration  Show configuration parameters used by test 
+	                        scenario
+	  --show-test-cases     Show list of test case IDs of the given
+	                        test scenario
+
+	Show test case attribute additional parameters:
+	(Used with above show flags for specific test case attributes)
+	  --test-id             Search attribute for test case ID(s).
+	                        Multiple IDs should be separated with comma.
+	  --scenario-id         Search/run attribute for test scenario ID(s)
+	  --name                Search/run attribute for test case(s) with name
+	  --name-regex          Search test case file name with Perl regular
+	                        expression
+
+	Show IDs by given attribute:
+	  --show-id-of-tag      Show test case IDs for given tag
+
+	Show IDs additional parameters:
+	  --test-tag            Use with for --show-id-of-tag to show all
+	                        id's for given tag
+	  --scenario-tag        As above for scenarios
+	  --test-author         Corelate with --show-id. Show all IDs for given
+	                        author
+
+	Show all parameter:
+	  --all-scenarios       Show given parameter for all test scenarios
+	  --all-tests           Show given parameter for all test cases
+
+	Additional parameters:
+	  --notable             Print 'show-<detail>' output in nicely formatted
+	                        ASCII table.
+	                        (not table format)
+	  --sort                Print 'show-<detail>' numerically sorted
+	  --run                 Execute test cases given by --test-id,--name or --name-regex
+	                        or an test scenario given by --scenario-id
+	  --config-file         Matsrunner configuration file (default: .sptf)
+	  --test-builder       	Support for code with Test::Builder
+	  --verbose             Define environment variable SPTF_VERBOSE 
+	  --no-priority-check   No priority check before the session (overwrite
+							configuration file)
+	  --no-dependency-check No dependency check before the session (overwrite
+							configuration file)
+	  --priority            Define priority level for the session (currently:
+							less or equal)
+	  --add-defualt-name    Add to the executor method string "[testid]: [test
+							summary]" as first parameter. It will be used as test
+							name. (check configuration file for default).
+							WARNING: Use it carefully. If enabled, each methods
+							first parameter will be passed behind your back.
+							(And ot from the 'parameters' tag in configuration
+							file).
+	  --output-file         Name of the file where the test output will be
+                            printed to
+	  --motto               ..
+
+	Examples:
+
+	Execute test cases with id 2 and 10
+    # sptf --run --test-id=2,10
+
+	Execute test scenario with id 7
+    # sptf --run --scenario-id 7
+
+	Show who's executing test case with id 10:
+	# sptf --show-executor --test-id=10
+	
+	Show date of the test cases with id 2 and 10:
+	# sptf --show-date --test-id=2,10
+	
+	Show all test ids for tag SANITY
+	# sptf --show-id-of-tag --test-tag=SANITY
+	
+	Show parameters of the test case name test1.yaml
+	# sptf --show-params --name=test1.yaml
+	
+	Show authors of test cases for the name beginning with string "test_1"
+	For example: test_1.yaml test_11.yaml test_1_1_1.yaml
+	# sptf --show-author --name-regex=test_1.*
+	
+	Shows summaries of all scenarios
+	# sptf --show-summary --all-scenarios
+
+	Show summaires of all test cases in the scenario
+	# sptf --show-tc-summary --scenario-id 1
+
+	Show all tags in used in test cases
+	# sptf --show-all-tags --all-tests
+
+END_OF_USAGE
+
+	print $usage_msg;
+	exit 0;
+}
+

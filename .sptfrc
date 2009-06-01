@@ -1,0 +1,13 @@
+# SPTF configuration file
+{
+notable           => 0, # In show commands, print the results in ASCII formatted table
+testbuilder       => 0, # Execute mastrunner in the Test::Builder manner
+priority          => 2, # Not implemented yet
+verbose           => 0, # Create environment variable SPTF_VERBOSE (useful to start 
+				        # more verbose diagnostic output while working with Test::Builder)
+testoutput        => 0, # Name of the file where the test output will be printed to
+adddefaultname    => 1, # Add default test name to the function that use test-builder
+nodependencycheck => 0, # No dependency check before the run
+noprioritycheck   => 0, # No priority check before the run
+showtotaltime     => 0, # Show total test time at the end
+}
