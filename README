@@ -39,7 +39,7 @@ Next versions will include more sophisticated examples.
 
 DEPENDENCIES
 
-I do my best to have as few as possible. Thus I do have some.
+I do my best to have as few as possible. But still - there are some.
 
 * Perl interpreter (I guess, versions 5.8.5 and higher are good enough)
 
@@ -48,10 +48,7 @@ The follow Perl modules:
 * YAML - as above (and if not, let me know)
 * Getopt::Long - as above
 * Test::More   - as above
-* Test::Builder - it's not the part of the Perl core installation.
-                  You should install it from CPAN or with the help of
-				  your distribution packaging system
-				  
+* Test::Builder - should be a part of Test::More module
 * Time::Elapse - it's not the Perl core module, but it's not mandatory.
                  SPTF can work without it. Without this you won't see
 				 the total time of the test.
@@ -63,7 +60,7 @@ COPYRIGHT AND LICENSE
 
 Thomas Maier, hayzer@gmail.com 
 
-Copyright (c) 2008-2008 by Thomas Maier. All Rights Reserved.  This program
+Copyright (c) 2008-2009 by Thomas Maier. All Rights Reserved.  This program
 is free software; you can redistribute it and/or modify it under the
 same terms as Perl itself.
 
