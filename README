@@ -1,0 +1,72 @@
+SPTF version 0.01
+=================
+
+DESCRIPTION
+
+SPTF is a framework for tests management and execution.
+Most testing framework that I know does not combine those two
+different tasks. Either you can only execute the tests with
+more or less control over this process, or you can manage
+somehow the information about the tests without the ability to
+execute them.
+SPTF is a single application to rule them both, to bring them
+both and in the darkness to bind them.
+
+INSTALLATION
+
+To install this software, just open the SPTF compressed archive.
+
+USAGE
+
+# ./sptf --help
+
+For more info read SPTF wiki.
+
+EXAMPLE
+
+There is a very short example of how the test case/scenario
+may look like. 
+You may start with the follow commands:
+
+# ./sptf --show-summary --all-scenarios
+
+# ./sptf --show-tc-summary --scenario-id 1
+
+# ./sptf --run --scenario-id 1
+
+This should give you a basic idea what the SPTF is about.
+Next versions will include more sophisticated examples.
+
+DEPENDENCIES
+
+I do my best to have as few as possible. Thus I do have some.
+
+* Perl interpreter (I guess, versions 5.8.5 and higher are good enough)
+
+The follow Perl modules:
+* Carp - should be part of your Perl core installation
+* YAML - as above (and if not, let me know)
+* Getopt::Long - as above
+* Test::More   - as above
+* Test::Builder - it's not the part of the Perl core installation.
+                  You should install it from CPAN or with the help of
+				  your distribution packaging system
+				  
+* Time::Elapse - it's not the Perl core module, but it's not mandatory.
+                 SPTF can work without it. Without this you won't see
+				 the total time of the test.
+
+* Text::ASCIITable - as above. If available, all show options are 
+                     printed within nice ASCII tables.
+
+COPYRIGHT AND LICENSE
+
+Thomas Maier, hayzer@gmail.com 
+
+Copyright (c) 2008-2008 by Thomas Maier. All Rights Reserved.  This program
+is free software; you can redistribute it and/or modify it under the
+same terms as Perl itself.
+
+If you have suggestions for improvement, please drop me a line.  If
+you make improvements to this software, I ask that you please send me
+a copy of your changes. Thanks.
