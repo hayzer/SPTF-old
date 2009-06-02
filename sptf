@@ -754,6 +754,31 @@ sub yaml_files {
 		   readdir $dsu;
 }
 
+sub read_meta_file {
+	my ($file)  = @_;
+	my $content = {};
+	my ($lastkey,$lastval);
+
+	open my $fh, $file, or die "Can't open $file\n";
+	while(<$fh>) {
+		next if ($_ =~ /^\s*#|^$/); # Ignore comments and empty lines
+		chomp($_);
+		$_ =~ s/^(.*)\s+?#.*$/$1/; # Ignore comments at the end of the line
+		my ($key,$val) =  $_  =~ m{^ ([a-z]+)?:? \s+ (.*) $}xms;
+
+		if (defined $key and defined $val) {
+			$lastkey = $key;
+			$content->{$key} = $val;
+		}
+		elsif (not defined $key and defined $val) {
+			$content->{$lastkey} .= "\n$val";
+		}
+	}
+	close $fh;
+
+	return $content;
+}
+
 sub short_usage {
 	(my $usage_msg = <<END_OF_USAGE) =~ s/^\t//gm;
 	Usage:  sptf [OPTIONS]
